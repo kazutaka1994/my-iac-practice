@@ -1,0 +1,45 @@
+name: Rain CD
+ 
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+ 
+env:
+  AWS_ROLE_ARN: ${{ secrets.AWS_ROLE }}
+  AWS_REGION: ap-northeast-1
+ 
+permissions:
+  id-token: write
+  contents: read
+ 
+jobs:
+  rain_cd:
+    name: rain cd
+    #runs-on: ubuntu-latest
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+ 
+      - name: Configure AWS OIDC
+        uses: aws-actions/configure-aws-credentials@v1-node16
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          #role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ env.AWS_ROLE_NAME }}
+          #role-session-name: ${{ env.AWS_ROLE_SESSION_NAME }}
+          aws-region: ${{ env.AWS_REGION }}
+ 
+      - name: Setup rain
+        id: Setup
+        working-directory: ./
+        run: 
+          #echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
+          brew install rain
+   
+      - name: rain deploy -y
+        id: format
+        working-directory: ./templates
+        run: rain deploy -y sg.yml

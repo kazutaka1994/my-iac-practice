@@ -1,0 +1,11 @@
+- hosts: all
+  become: yes
+  tasks:
+  - name: Apacheインストール
+    yum: name=httpd state=latest
+  - name: Apacheの起動
+    service: name=httpd state=started enabled=yes
+  - name: Apacheの起動確認
+    shell: ps aux | grep httpd
+    register: ps_result
+    changed_when: false

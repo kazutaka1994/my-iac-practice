@@ -1,0 +1,143 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Parameters:
+  networkResourceNamePrefix:
+    Type: String
+    Default: test
+  vpcCidr:
+    Type: String
+    Default: "192.168.0.0/16"
+  publicSubnetACider:
+    Type: String
+    Default: "192.168.1.0/24"
+  publicSubnetCCider:
+    Type: String
+    Default: "192.168.2.0/24"
+  privateSubnetACider:
+    Type: String
+    Default: "192.168.10.0/24"
+  privateSubnetCCider:
+    Type: String
+    Default: "192.168.11.0/24"
+  
+    
+Resources:
+  
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref vpcCidr
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${networkResourceNamePrefix}-vpc
+
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref AWS::Region
+      VpcId: !Ref VPC
+      CidrBlock: !Ref publicSubnetACider
+      Tags:
+        - Key: Name
+          Value: !Sub ${networkResourceNamePrefix}-pub-subnet-a
+
+  PublicSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref AWS::Region
+      VpcId: !Ref VPC
+      CidrBlock: !Ref publicSubnetCCider
+      Tags:
+        - Key: Name
+          Value: !Sub ${networkResourceNamePrefix}-pub-subnet-c
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref AWS::Region
+      VpcId: !Ref VPC
+      CidrBlock: !Ref privateSubnetACider
+      Tags:
+        - Key: Name
+          Value: !Sub ${networkResourceNamePrefix}-prv-subnet-a
+
+  PrivateSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 1
+        - Fn::GetAZs: !Ref AWS::Region
+      VpcId: !Ref VPC
+      CidrBlock: !Ref privateSubnetCCider
+      Tags:
+        - Key: Name
+          Value: !Sub ${networkResourceNamePrefix}-prv-subnet-c
+  
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${networkResourceNamePrefix}-igw
+  
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+  
+  DefaultRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${networkResourceNamePrefix}-routetable
+
+  RoutePublic:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref DefaultRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  
+  RouteTablePublicA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref DefaultRouteTable
+
+  RouteTablePublicC:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetC
+      RouteTableId: !Ref DefaultRouteTable
+
+Outputs:
+  Vpc:
+    Value: !Ref VPC
+    Export:
+      Name: !Sub ${networkResourceNamePrefix}-vpc
+  PublicSubnetA:
+    Value: !Ref PublicSubnetA
+    Export:
+      Name: !Sub ${networkResourceNamePrefix}-pub-subnet-a
+  PublicSubnetC:
+    Value: !Ref PublicSubnetC
+    Export:
+      Name: !Sub ${networkResourceNamePrefix}-pub-subnet-c
+  PrivateSubnetA:
+    Value: !Ref PrivateSubnetA
+    Export:
+      Name: !Sub ${networkResourceNamePrefix}-prv-subnet-a
+  PrivateSubnetC:
+    Value: !Ref PrivateSubnetC
+    Export:
+      Name: !Sub ${networkResourceNamePrefix}-prv-subnet-c

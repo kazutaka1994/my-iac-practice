@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+  Ec2KeyPairName:
+    Type: String
+
+  Ec2ImageId:
+    Type: AWS::SSM::Parameter::Value<String>
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+  Ec2KeyName:
+    Type: String
+
+  Ec2SubnetId:
+    Type: String
+
+  #Ec2SubnetAz:
+  #  Type: String
+  Ec2InstanceType:
+    Type: String
+    Default: t3.micro
+
+  Ec2SecurityGroupId:
+    Type: String
+
+  Ec2InstanceName:
+    Type: String
+
+  PlayBookBucketName:
+    Type: String
+
+  PlayBookZipFileName:
+    Type: String
+
+  PlayBookFileName:
+    Type: String
+
+Resources:
+  Ec2KeyPair:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: !Ref Ec2KeyPairName
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub ${AWS::StackName}-EC2Role
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      MaxSessionDuration: 3600
+      ManagedPolicyArns: 
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2RoleforSSM
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+  
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref EC2Role
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    DependsOn: Ec2KeyPair
+    Properties:
+      ImageId: !Ref Ec2ImageId
+      KeyName: !Ref Ec2KeyName
+      SubnetId: !Ref Ec2SubnetId
+
+      #AvailabilityZone: !Ref Ec2SubnetAz
+      InstanceType: !Ref Ec2InstanceType
+      SecurityGroupIds:
+        - !Ref Ec2SecurityGroupId
+      IamInstanceProfile: !Ref InstanceProfile
+      Tags:
+        - Key: Name
+          Value: !Ref Ec2InstanceName
+
+  ApplyAnsiblePlaybooks:
+    Type: AWS::SSM::Association
+    Properties:
+      Name: AWS-ApplyAnsiblePlaybooks
+      AssociationName: sample-association
+      WaitForSuccessTimeoutSeconds: 300
+      Targets:
+        - Key: InstanceIds
+          Values:
+            - !Ref EC2Instance
+      OutputLocation:
+        S3Location:
+          OutputS3BucketName: !Ref PlayBookBucketName
+          OutputS3KeyPrefix: log
+      Parameters:
+        SourceType:
+          - S3
+        SourceInfo:
+          - !Sub |
+            {"path": "https://${PlayBookBucketName}.s3-${AWS::Region}.amazonaws.com/${PlayBookZipFileName}"}
+        InstallDependencies:
+          - "True"
+        PlaybookFile:
+          - !Ref PlayBookFileName
+        ExtraVariables:
+          - SSM=True
+        Check:
+          - "False"
+        Verbose:
+          - -v

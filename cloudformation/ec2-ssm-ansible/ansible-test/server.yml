@@ -1,0 +1,6 @@
+- name: ansible test
+  hosts: all
+  become: true
+  become_method: sudo
+  roles:
+    - common

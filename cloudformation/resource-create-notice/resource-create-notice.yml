@@ -1,0 +1,63 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: Notify all resources via SNS topics when they are created.
+
+Parameters:
+  EventBusName:
+    Type: String
+    Default: default
+
+  EventBridgeRuleState:
+    Type: String
+    Default: ENABLED
+
+  SNSTopicName:
+    Type: String
+
+Resources:
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Ref SNSTopicName
+
+  EventBridgeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub ${AWS::StackName}-EventBridgeRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSNSFullAccess
+
+  EventBridgeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Catch all CloudTrail events that create resources and broadcast them to SNS.
+      EventBusName: !Ref EventBusName
+      EventPattern:
+        source:
+          - aws.config
+        detail-type:
+          - Config Configuration Item Change
+        detail:
+          messageType:
+            - ConfigurationItemChangeNotification
+          configurationItem:
+            resourceType:
+              - prefix: "AWS::"
+          configurationItemStatus:
+            - ResourceDiscovered
+      Name: !Sub ${AWS::StackName}-EventBridgeRule
+      #RoleArn: !Ref EventBridgeRole
+      State: !Ref EventBridgeRuleState
+      Targets:
+        - Arn: !Ref SNSTopic
+          Id: !Ref SNSTopicName

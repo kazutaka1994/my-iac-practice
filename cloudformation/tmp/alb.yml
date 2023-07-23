@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create ECS Cluster and Service
+
+Parameters:
+  networkResourceNamePrefix:
+    Type: String
+    Default: test
+  stackNamePrefix:
+    Type: String
+    Default: test
+  albInboundCidr:
+    Type: String
+    Default: 
+
+Resources:
+  
+  TargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      VpcId: Fn::ImportValue: 
+        Fn::Sub: "${networkResourceNamePrefix}-vpc"
+      Name: !Sub "${stackNamePrefix}-target-group"
+      Protocol: HTTP
+      Port: 80
+      TargetType: ip
+
+  InternetAlb:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      Name: !Sub "${stackNamePrefix}-internet-alb"
+      Tags:
+        - Key: Name
+          Value: !Sub "${stackNamePrefix}-internet-alb"
+      Scheme: "internet-facing"
+      LoadBalancerAttributes:
+        - Key: "deletion_protection.enabled"
+          Value: false
+        - Key: "idle_timeout.timeout_seconds"
+          Value: 60
+        - Key: "access_logs.s3.enabled"
+          Value: false
+        #- Key: "access_logs.s3.bucket"
+        #  Value: "test-s3b-alb-logs"
+      SecurityGroups:
+        - !Ref AlbSecurityGroup
+      Subnets:
+        - Fn::ImportValue: 
+          Fn::Sub: "${networkResourceNamePrefix}-pub-subnet-a"
+        - Fn::ImportValue: 
+          Fn::Sub: "${networkResourceNamePrefix}-pub-subnet-c"
+        
+  TestAlbListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref InternetAlb
+      Port: 80
+      Protocol: HTTP
+
+  Type: AWS::EC2::SecurityGroup
+  Properties: 
+    GroupDescription: "ALB Security Group"
+    GroupName: !Sub "${stackNamePrefix}-alb-sg"
+    #SecurityGroupEgress: 
+    #  - 
+    SecurityGroupIngress: 
+      - IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: !Ref albInboundCidr
+    Tags: 
+      - Key: Name
+        Value: !Sub "${stackNamePrefix}-alb-sg"
+    VpcId: Fn::ImportValue: 
+      Fn::Sub: "${networkResourceNamePrefix}-vpc"
+  
+Output:
+  TargetGroup:
+    Value: !Ref TargetGroup
+    Export:
+      Name: !Sub "${stackNamePrefix}-target-group"
+
+  SecurityGroup:
+    Value: !Ref AlbSecurityGroup
+    Export:
+      Name: !Sub "${stackNamePrefix}-alb-sg"

@@ -1,0 +1,146 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Create ECS Cluster and Service
+
+Parameters:
+  networkResourceNamePrefix:
+    Type: String
+    Default: test
+
+  stackNamePrefix:
+    Type: String
+    Default: test
+
+  ecsClusterName:
+    Type: String
+  
+  ecsTaskCpuUnit:
+    Type: String
+    AllowedValues: [ 256, 512, 1024, 2048, 4096  ]
+    Default: 256
+  
+  ecsTaskMemory:
+    Type: String
+    AllowedValues: [ 512, 1024, 2048, 3072, 4096, 5120, 6144, 7168, 8192 ]
+    Default: 512
+  
+  ecsDesiredCount:
+    Type: Number
+    Default: 1
+  
+  ecsImageName:
+    Type: String
+    Default: "nginx:latest"
+  
+  ecsLogGroupName:
+    Type: String
+    MinLength: 1
+    MaxLength: 512
+
+Resources: 
+  EcsCluster:
+    Type: "AWS::ECS::Cluster"
+    Properties:
+      ClusterName: !Ref ecsClusterName
+
+  EcsTaskDefinition:
+    Type: "AWS::ECS::TaskDefinition"
+    Properties:
+      Cpu: !Ref ecsTaskCpuUnit
+      ExecutionRoleArn: !GetAtt  EcsTaskExecutionRole.Arn
+      Family: !Sub "${stackNamePrefix}-${ecsClusterName}-task"
+      Memory: !Ref ecsTaskMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ContainerDefinitions:
+        - Name: !Sub "${stackNamePrefix}-${ecsClusterName}-container"
+          Image: !Ref ecsImageName
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref EcsLogGroup
+              awslogs-region: !Ref "AWS::Region"
+              awslogs-stream-prefix: !Ref ecsClusterName
+          MemoryReservation: !Ref ecsTaskMemory
+          PortMappings:
+            - HostPort: 80
+              Protocol: tcp
+              ContainerPort: 80
+
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref EcsCluster
+      DesiredCount: !Ref ecsDesiredCount
+      LaunchType: FARGATE
+      LoadBalancers:
+        -
+          TargetGroupArn: 
+            Fn::ImportValue: 
+              Fn::Sub: "${stackNamePrefix}-target-group"
+          ContainerPort: 80
+          ContainerName: !Sub "${stackNamePrefix}-${ecsClusterName}-container"
+      NetworkConfiguration:
+       AwsvpcConfiguration:
+           AssignPublicIp: DISABLED
+           SecurityGroups:
+             - !Ref EcsSecurityGroup
+           Subnets:
+             - Fn::ImportValue: 
+                Fn::Sub: "${networkResourceNamePrefix}-pub-subnet-a"
+             - Fn::ImportValue:
+                Fn::Sub: "${networkResourceNamePrefix}-pub-subnet-c"
+      ServiceName: !Sub "${stackNamePrefix}-${ecsClusterName}-service"
+      TaskDefinition: !Ref EcsTaskDefinition
+
+  EcsLogGroup:
+    Type: "AWS::Logs::LogGroup"
+    Properties:
+      LogGroupName: !Ref ecsLogGroupName
+
+  EcsTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${stackNamePrefix}-ecs-task-execution-role"
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  EcsSecurityGroup:    
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: "ECS Security Group"
+      GroupName: !Sub "${stackNamePrefix}-ecs-sg"
+      #SecurityGroupEgress: 
+      #  - 
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          SourceSecurityGroupId: 
+            Fn::ImportValue: 
+              Fn::Sub: "${stackNamePrefix}-alb-sg"
+      Tags: 
+        - Key: Name
+          Value: !Sub "${stackNamePrefix}-alb-sg"
+      VpcId: 
+        Fn::ImportValue: 
+          Fn::Sub: "${networkResourceNamePrefix}-vpc"
+
+Outputs:
+  EcsCluster:
+    Value: !Ref EcsCluster
+    Export:
+      Name: !Sub "${stackNamePrefix}-ecs-cluster"
+
+  EcsLogGroup:
+    Value: !Ref EcsLogGroup
+    Export:
+      Name: !Sub "${stackNamePrefix}-ecs-log-group"

@@ -1,0 +1,68 @@
+name: Rain CI
+ 
+on: 
+  pull_request:
+    paths:
+      - "templates/**"
+ 
+env:
+  AWS_ROLE_ARN: ${{ secrets.AWS_ROLE }}
+  AWS_REGION: ap-northeast-1
+ 
+permissions:
+  id-token: write
+  contents: read
+ 
+jobs:
+  rain_ci:
+    name: rain ci
+    #runs-on: ubuntu-latest
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+ 
+      - name: Configure AWS OIDC
+        uses: aws-actions/configure-aws-credentials@v1-node16
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          #role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ env.AWS_ROLE_NAME }}
+          #role-session-name: ${{ env.AWS_ROLE_SESSION_NAME }}
+          aws-region: ${{ env.AWS_REGION }}
+ 
+      - name: Setup rain and taskcat
+        id: Setup
+        working-directory: ./
+        run: 
+          #echo "/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin" >> $GITHUB_PATH
+          brew install rain
+          #brew install python
+          #pip install upgrade
+          #pip install cfn-lint
+          #pip install pydot
+          
+      - name: rain fmt -w
+        id: format
+        working-directory: ./templates
+        run: rain fmt -w sg.yml
+ 
+      - name: rain fmt -v
+        id: validate
+        working-directory: ./templates 
+        run: rain fmt -v sg.yml
+
+      - name: CFN Lint Command
+        uses: scottbrenner/cfn-lint-action@v2
+        with:
+          command: cfn-lint --debug
+ 
+      - name: rain cat before stack
+        continue-on-error: true
+        id: diff
+        working-directory: ./templates 
+        run: rain cat sg > ./before.yml
+ 
+      - name: rain diff
+        id: plan
+        working-directory: ./templates
+        run: rain diff before.yml sg.yml
